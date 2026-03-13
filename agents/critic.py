@@ -1,14 +1,21 @@
 from state import PitchState
+from dotenv import load_dotenv
+import os
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage
+
+load_dotenv("../.env")
+
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    google_api_key=os.getenv("GEMINI_API_KEY")
+)
 
 def critic_agent(state: PitchState) -> PitchState:
     """
     Agent 4: Critic
-    Job: Quality check the email
-    - Does it sound human?
-    - Is it too salesy?
-    - Is it too long?
-    - Does it have a clear call to action?
-    If it fails — send back to Writer to fix
+    Job: Use Gemini to judge if the email sounds human
+    and is good enough to send
     """
     
     company_name = state["company_name"]
@@ -17,66 +24,54 @@ def critic_agent(state: PitchState) -> PitchState:
     
     print(f"🔍 Critiquing email for {company_name}...")
     
-    # Run quality checks
-    checks = run_quality_checks(email_subject, email_body, company_name)
+    result = critique_with_gemini(email_subject, email_body)
     
-    # Calculate overall quality
-    passed = all(checks.values())
-    feedback = generate_feedback(checks)
-    
-    if passed:
+    if result["approved"]:
         print(f"✅ Email passed all quality checks")
     else:
         print(f"⚠️  Email failed some checks — needs revision")
-        print(f"   Feedback: {feedback}")
+        print(f"   Feedback: {result['feedback']}")
     
     return {
         **state,
-        "quality_approved": passed,
-        "quality_feedback": feedback
+        "quality_approved": result["approved"],
+        "quality_feedback": result["feedback"]
     }
 
-def run_quality_checks(subject: str, body: str, company_name: str = "") -> dict:
-    """Run all quality checks on the email"""
-    checks = {}
+
+def critique_with_gemini(subject: str, body: str) -> dict:
     
-    # Check 1: Not too long (under 200 words)
-    word_count = len(body.split())
-    checks["length_ok"] = word_count < 200
+    prompt = f"""You are a senior sales coach reviewing a cold outreach email.
+
+Subject: {subject}
+Body: {body}
+
+Evaluate this email strictly on these criteria:
+1. Does it sound human and conversational? (not robotic or templated)
+2. Is it under 120 words?
+3. Does it have exactly ONE clear call to action?
+4. Is it free of buzzwords and corporate speak?
+5. Does it reference something specific about the company?
+
+Return in this exact format:
+APPROVED: [YES or NO]
+FEEDBACK: [one sentence feedback]
+"""
     
-    # Check 2: Has a call to action
-    cta_phrases = ["call", "meeting", "chat", "talk", "connect", "15-minute", "quick"]
-    checks["has_cta"] = any(phrase in body.lower() for phrase in cta_phrases)
-    
-    # Check 3: Not too salesy
-    salesy_words = ["guaranteed", "revolutionary", "best in class", "synergy", "leverage"]
-    checks["not_salesy"] = not any(word in body.lower() for word in salesy_words)
-    
-    # Check 4: Has personalization
-    checks["is_personalized"] = len(subject) > 10
-    
-    # Check 5: Has a sign off
-    checks["has_signoff"] = "Best" in body or "Thanks" in body or "Regards" in body
-    
-    return checks
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return parse_critique(response.content)
 
 
-def generate_feedback(checks: dict) -> str:
-    """Generate human readable feedback"""
-    issues = []
+def parse_critique(response: str) -> dict:
+    lines = response.strip().split("\n")
     
-    if not checks.get("length_ok"):
-        issues.append("Email is too long — keep it under 200 words")
-    if not checks.get("has_cta"):
-        issues.append("Missing clear call to action")
-    if not checks.get("not_salesy"):
-        issues.append("Too salesy — remove buzzwords")
-    if not checks.get("is_personalized"):
-        issues.append("Needs more personalization")
-    if not checks.get("has_signoff"):
-        issues.append("Missing sign off")
+    result = {"approved": False, "feedback": ""}
     
-    if not issues:
-        return "All checks passed!"
+    for line in lines:
+        if line.startswith("APPROVED:"):
+            verdict = line.replace("APPROVED:", "").strip().upper()
+            result["approved"] = verdict == "YES"
+        elif line.startswith("FEEDBACK:"):
+            result["feedback"] = line.replace("FEEDBACK:", "").strip()
     
-    return " | ".join(issues)
+    return result

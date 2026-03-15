@@ -1,18 +1,8 @@
 from state import PitchState
 import httpx
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-import os
-from langchain_google_genai import ChatGoogleGenerativeAI
+from config import llm
 from langchain_core.messages import HumanMessage
-
-load_dotenv("../.env")
-
-# Initialize Gemini
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=os.getenv("GEMINI_API_KEY")
-)
 
 def researcher_agent(state: PitchState) -> PitchState:
     """

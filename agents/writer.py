@@ -1,16 +1,8 @@
 from state import PitchState
 from dotenv import load_dotenv
 import os
-from langchain_google_genai import ChatGoogleGenerativeAI
+from config import llm
 from langchain_core.messages import HumanMessage
-
-load_dotenv("../.env")
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=os.getenv("GEMINI_API_KEY")
-)
-
 def writer_agent(state: PitchState) -> PitchState:
     """
     Agent 3: Writer

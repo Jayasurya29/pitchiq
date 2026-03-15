@@ -1,15 +1,8 @@
 from state import PitchState
 from dotenv import load_dotenv
 import os
-from langchain_google_genai import ChatGoogleGenerativeAI
+from config import llm_lite
 from langchain_core.messages import HumanMessage
-
-load_dotenv("../.env")
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=os.getenv("GEMINI_API_KEY")
-)
 
 def critic_agent(state: PitchState) -> PitchState:
     """
@@ -58,7 +51,7 @@ APPROVED: [YES or NO]
 FEEDBACK: [one sentence feedback]
 """
     
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = llm_lite.invoke([HumanMessage(content=prompt)])
     return parse_critique(response.content)
 
 

@@ -11,7 +11,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from database.database import SessionLocal
-from database.crud import save_research, get_all_research
+from database.crud import save_research, get_all_research, get_pending_research, approve_research, reject_research
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))
 
@@ -171,7 +171,51 @@ def get_history():
             "fit_score": r.fit_score,
             "email_subject": r.email_subject,
             "quality_approved": r.quality_approved,
+            "approval_status": r.approval_status,
             "created_at": str(r.created_at)
         }
         for r in records
     ]
+
+@app.get("/pending")
+def get_pending():
+    """Get all emails waiting for human approval"""
+    db = SessionLocal()
+    records = get_pending_research(db)
+    db.close()
+    return [
+        {
+            "id": r.id,
+            "company_name": r.company_name,
+            "fit_score": r.fit_score,
+            "email_subject": r.email_subject,
+            "email_body": r.email_body,
+            "pain_points": r.pain_points,
+            "value_props": r.value_props,
+            "send_time": r.send_time,
+            "follow_up_sequence": r.follow_up_sequence,
+            "approval_status": r.approval_status,
+            "created_at": str(r.created_at)
+        }
+        for r in records
+    ]
+
+@app.post("/approve/{research_id}")
+def approve_email(research_id: int):
+    """Approve an email for sending"""
+    db = SessionLocal()
+    record = approve_research(db, research_id)
+    db.close()
+    if not record:
+        raise HTTPException(status_code=404, detail="Research not found")
+    return {"message": f"Email approved for {record.company_name}!", "id": research_id}
+
+@app.post("/reject/{research_id}")
+def reject_email(research_id: int, feedback: str = ""):
+    """Reject an email with optional feedback"""
+    db = SessionLocal()
+    record = reject_research(db, research_id, feedback)
+    db.close()
+    if not record:
+        raise HTTPException(status_code=404, detail="Research not found")
+    return {"message": f"Email rejected for {record.company_name}", "id": research_id}

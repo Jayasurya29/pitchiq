@@ -41,3 +41,33 @@ def get_research_by_company(db: Session, company_name: str):
     return db.query(ResearchHistory).filter(
         ResearchHistory.company_name.ilike(f"%{company_name}%")
     ).first()
+
+def get_pending_research(db: Session):
+    """Get all emails waiting for approval"""
+    return db.query(ResearchHistory).filter(
+        ResearchHistory.approval_status == "pending"
+    ).order_by(ResearchHistory.created_at.desc()).all()
+
+def approve_research(db: Session, research_id: int):
+    """Approve an email"""
+    record = db.query(ResearchHistory).filter(
+        ResearchHistory.id == research_id
+    ).first()
+    if record:
+        record.approval_status = "approved"
+        db.commit()
+        db.refresh(record)
+        print(f"✅ Approved research ID {research_id}")
+    return record
+
+def reject_research(db: Session, research_id: int, feedback: str = ""):
+    """Reject an email with feedback"""
+    record = db.query(ResearchHistory).filter(
+        ResearchHistory.id == research_id
+    ).first()
+    if record:
+        record.approval_status = "rejected"
+        db.commit()
+        db.refresh(record)
+        print(f"❌ Rejected research ID {research_id}")
+    return record

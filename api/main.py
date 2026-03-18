@@ -7,6 +7,11 @@ import os
 import asyncio
 import json
 import concurrent.futures
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from database.database import SessionLocal
+from database.crud import save_research, get_all_research
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))
 
@@ -66,6 +71,11 @@ def research_company(request: ResearchRequest):
     try:
         pipeline = build_graph()
         result = pipeline.invoke(build_initial_state(request.company_name, request.company_website))
+
+        # Save to database
+        db = SessionLocal()
+        save_research(db, result)
+        db.close()
 
         return ResearchResponse(
             company_name=result["company_name"],
@@ -148,3 +158,20 @@ async def research_stream(company_name: str, company_website: str = ""):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
+
+@app.get("/history")
+def get_history():
+    db = SessionLocal()
+    records = get_all_research(db)
+    db.close()
+    return [
+        {
+            "id": r.id,
+            "company_name": r.company_name,
+            "fit_score": r.fit_score,
+            "email_subject": r.email_subject,
+            "quality_approved": r.quality_approved,
+            "created_at": str(r.created_at)
+        }
+        for r in records
+    ]

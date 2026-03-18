@@ -24,4 +24,5 @@ class ResearchHistory(Base):
     quality_approved = Column(Boolean)
     send_time = Column(String(255))
     follow_up_sequence = Column(ARRAY(Text))
+    approval_status = Column(String(50), default='pending')
     created_at = Column(TIMESTAMP, server_default=func.now())

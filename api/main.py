@@ -7,7 +7,7 @@ import os
 import asyncio
 import json
 import concurrent.futures
-import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from database.database import SessionLocal
@@ -27,35 +27,49 @@ app.add_middleware(
 )
 
 class ResearchRequest(BaseModel):
-    company_name: str
-    company_website: str = ""
+    contact_name: str
+    contact_title: str
+    hotel_name: str
+    hotel_location: str = ""
+    linkedin_url: str = ""
+    email: str = ""
 
 class ResearchResponse(BaseModel):
-    company_name: str
+    contact_name: str
+    contact_title: str
+    hotel_name: str
     fit_score: int
     pain_points: list[str]
     value_props: list[str]
     email_subject: str
     email_body: str
+    linkedin_message: str
     quality_approved: bool
     send_time: str
     follow_up_sequence: list[str]
 
 
-def build_initial_state(company_name: str, company_website: str) -> dict:
+def build_initial_state(request: ResearchRequest) -> dict:
     return {
-        "company_name": company_name,
-        "company_website": company_website,
+        "contact_name": request.contact_name,
+        "contact_title": request.contact_title,
+        "hotel_name": request.hotel_name,
+        "hotel_location": request.hotel_location,
+        "linkedin_url": request.linkedin_url or None,
+        "email": request.email or None,
         "company_summary": None,
         "recent_news": None,
         "pain_points": None,
         "signals": None,
+        "contact_summary": None,
         "fit_score": None,
         "value_props": None,
         "email_subject": None,
         "email_body": None,
+        "linkedin_message": None,
         "quality_approved": None,
         "quality_feedback": None,
+        "rewrite_count": None,
         "send_time": None,
         "follow_up_sequence": None
     }
@@ -70,7 +84,7 @@ def health_check():
 def research_company(request: ResearchRequest):
     try:
         pipeline = build_graph()
-        result = pipeline.invoke(build_initial_state(request.company_name, request.company_website))
+        result = pipeline.invoke(build_initial_state(request))
 
         # Save to database
         db = SessionLocal()
@@ -78,12 +92,15 @@ def research_company(request: ResearchRequest):
         db.close()
 
         return ResearchResponse(
-            company_name=result["company_name"],
+            contact_name=result["contact_name"],
+            contact_title=result["contact_title"],
+            hotel_name=result["hotel_name"],
             fit_score=result["fit_score"] or 0,
             pain_points=result["pain_points"] or [],
             value_props=result["value_props"] or [],
             email_subject=result["email_subject"] or "",
             email_body=result["email_body"] or "",
+            linkedin_message=result["linkedin_message"] or "",
             quality_approved=result["quality_approved"] or False,
             send_time=result["send_time"] or "",
             follow_up_sequence=result["follow_up_sequence"] or []
@@ -94,7 +111,14 @@ def research_company(request: ResearchRequest):
 
 
 @app.get("/research/stream")
-async def research_stream(company_name: str, company_website: str = ""):
+async def research_stream(
+    contact_name: str,
+    contact_title: str,
+    hotel_name: str,
+    hotel_location: str = "",
+    linkedin_url: str = "",
+    email: str = ""
+):
 
     async def event_generator():
         def send(event_type, message="", agent="", result=None):
@@ -103,47 +127,56 @@ async def research_stream(company_name: str, company_website: str = ""):
                 data["result"] = result
             return f"data: {json.dumps(data)}\n\n"
 
-        yield send("start", message="Starting research for " + company_name)
+        yield send("start", message=f"Starting research for {contact_name} at {hotel_name}")
         await asyncio.sleep(0.1)
 
-        yield send("agent_start", agent="researcher", message="Researching " + company_name + "...")
+        yield send("agent_start", agent="researcher", message=f"Researching {hotel_name} & {contact_name}...")
         await asyncio.sleep(0.1)
 
         try:
+            request = ResearchRequest(
+                contact_name=contact_name,
+                contact_title=contact_title,
+                hotel_name=hotel_name,
+                hotel_location=hotel_location,
+                linkedin_url=linkedin_url,
+                email=email
+            )
+
             loop = asyncio.get_event_loop()
             pipeline = build_graph()
 
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 result = await loop.run_in_executor(
                     pool,
-                    lambda: pipeline.invoke(build_initial_state(company_name, company_website))
+                    lambda: pipeline.invoke(build_initial_state(request))
                 )
 
             yield send("agent_done", agent="researcher", message="Research complete!")
             await asyncio.sleep(0.3)
 
-            score_msg = "Fit Score: " + str(result["fit_score"]) + "/100"
-            yield send("agent_done", agent="analyst", message=score_msg)
+            yield send("agent_done", agent="analyst", message=f"Fit Score: {result['fit_score']}/100")
             await asyncio.sleep(0.3)
 
-            email_msg = "Email written: " + (result["email_subject"] or "")
-            yield send("agent_done", agent="writer", message=email_msg)
+            yield send("agent_done", agent="writer", message=f"Email written: {result['email_subject'] or ''}")
             await asyncio.sleep(0.3)
 
-            yield send("agent_done", agent="critic", message="Quality approved!")
+            yield send("agent_done", agent="critic", message="Quality check complete!")
             await asyncio.sleep(0.3)
 
-            schedule_msg = "Scheduled: " + (result["send_time"] or "")
-            yield send("agent_done", agent="scheduler", message=schedule_msg)
+            yield send("agent_done", agent="scheduler", message=f"Scheduled: {result['send_time'] or ''}")
             await asyncio.sleep(0.3)
 
             final = {
-                "company_name": result["company_name"],
+                "contact_name": result["contact_name"],
+                "contact_title": result["contact_title"],
+                "hotel_name": result["hotel_name"],
                 "fit_score": result["fit_score"],
                 "pain_points": result["pain_points"] or [],
                 "value_props": result["value_props"] or [],
                 "email_subject": result["email_subject"] or "",
                 "email_body": result["email_body"] or "",
+                "linkedin_message": result["linkedin_message"] or "",
                 "quality_approved": result["quality_approved"] or False,
                 "send_time": result["send_time"] or "",
                 "follow_up_sequence": result["follow_up_sequence"] or []
@@ -158,6 +191,7 @@ async def research_stream(company_name: str, company_website: str = ""):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
+
 
 @app.get("/history")
 def get_history():
@@ -177,9 +211,9 @@ def get_history():
         for r in records
     ]
 
+
 @app.get("/pending")
 def get_pending():
-    """Get all emails waiting for human approval"""
     db = SessionLocal()
     records = get_pending_research(db)
     db.close()
@@ -200,22 +234,22 @@ def get_pending():
         for r in records
     ]
 
+
 @app.post("/approve/{research_id}")
 def approve_email(research_id: int):
-    """Approve an email for sending"""
     db = SessionLocal()
     record = approve_research(db, research_id)
     db.close()
     if not record:
         raise HTTPException(status_code=404, detail="Research not found")
-    return {"message": f"Email approved for {record.company_name}!", "id": research_id}
+    return {"message": f"Email approved!", "id": research_id}
+
 
 @app.post("/reject/{research_id}")
 def reject_email(research_id: int, feedback: str = ""):
-    """Reject an email with optional feedback"""
     db = SessionLocal()
     record = reject_research(db, research_id, feedback)
     db.close()
     if not record:
         raise HTTPException(status_code=404, detail="Research not found")
-    return {"message": f"Email rejected for {record.company_name}", "id": research_id}
+    return {"message": f"Email rejected", "id": research_id}

@@ -9,15 +9,21 @@ def save_research(db: Session, result: dict):
     """Save pipeline result to database"""
     try:
         record = ResearchHistory(
-            company_name=result.get("company_name", ""),
-            company_website=result.get("company_website", ""),
+            contact_name=result.get("contact_name", ""),
+            contact_title=result.get("contact_title", ""),
+            hotel_name=result.get("hotel_name", ""),
+            hotel_location=result.get("hotel_location", ""),
+            linkedin_url=result.get("linkedin_url", ""),
+            email=result.get("email", ""),
             company_summary=result.get("company_summary", ""),
+            contact_summary=result.get("contact_summary", ""),
             pain_points=result.get("pain_points", []),
             signals=result.get("signals", []),
             fit_score=result.get("fit_score", 0),
             value_props=result.get("value_props", []),
             email_subject=result.get("email_subject", ""),
             email_body=result.get("email_body", ""),
+            linkedin_message=result.get("linkedin_message", ""),
             quality_approved=result.get("quality_approved", False),
             send_time=result.get("send_time", ""),
             follow_up_sequence=result.get("follow_up_sequence", [])
@@ -25,28 +31,33 @@ def save_research(db: Session, result: dict):
         db.add(record)
         db.commit()
         db.refresh(record)
-        print(f"✅ Saved research for {result.get('company_name')} to database!")
+        print(f"✅ Saved research for {result.get('contact_name')} at {result.get('hotel_name')} to database!")
         return record
     except Exception as e:
         db.rollback()
         print(f"❌ Failed to save: {e}")
         return None
 
+
 def get_all_research(db: Session):
     """Get all past research results"""
     return db.query(ResearchHistory).order_by(ResearchHistory.created_at.desc()).all()
 
-def get_research_by_company(db: Session, company_name: str):
-    """Check if company was already researched"""
+
+def get_research_by_contact(db: Session, contact_name: str, hotel_name: str):
+    """Check if contact was already researched"""
     return db.query(ResearchHistory).filter(
-        ResearchHistory.company_name.ilike(f"%{company_name}%")
+        ResearchHistory.contact_name.ilike(f"%{contact_name}%"),
+        ResearchHistory.hotel_name.ilike(f"%{hotel_name}%")
     ).first()
+
 
 def get_pending_research(db: Session):
     """Get all emails waiting for approval"""
     return db.query(ResearchHistory).filter(
         ResearchHistory.approval_status == "pending"
     ).order_by(ResearchHistory.created_at.desc()).all()
+
 
 def approve_research(db: Session, research_id: int):
     """Approve an email"""
@@ -59,6 +70,7 @@ def approve_research(db: Session, research_id: int):
         db.refresh(record)
         print(f"✅ Approved research ID {research_id}")
     return record
+
 
 def reject_research(db: Session, research_id: int, feedback: str = ""):
     """Reject an email with feedback"""

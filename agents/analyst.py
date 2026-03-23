@@ -1,33 +1,27 @@
 from state import PitchState
-from dotenv import load_dotenv
-import os
-from langchain_google_genai import ChatGoogleGenerativeAI
+from config import llm
 from langchain_core.messages import HumanMessage
-
-load_dotenv("../.env")
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=os.getenv("GEMINI_API_KEY")
-)
 
 def analyst_agent(state: PitchState) -> PitchState:
     """
     Agent 2: Analyst
-    Job: Use Gemini to score the lead and map value props
+    Job: Score the lead and map value props based on contact + hotel info
     """
-    
-    company_name = state["company_name"]
+
+    contact_name = state["contact_name"]
+    contact_title = state["contact_title"]
+    hotel_name = state["hotel_name"]
     company_summary = state.get("company_summary", "")
     pain_points = state.get("pain_points", [])
     signals = state.get("signals", [])
-    
-    print(f"📊 Analysing {company_name}...")
-    
-    analysis = analyze_with_gemini(company_name, company_summary, pain_points, signals)
-    
+    contact_summary = state.get("contact_summary", "")
+
+    print(f"📊 Analysing {hotel_name}...")
+
+    analysis = analyze_with_gemini(contact_name, contact_title, hotel_name, company_summary, pain_points, signals, contact_summary)
+
     print(f"✅ Analysis complete — Fit Score: {analysis['fit_score']}/100")
-    
+
     return {
         **state,
         "fit_score": analysis["fit_score"],
@@ -35,19 +29,22 @@ def analyst_agent(state: PitchState) -> PitchState:
     }
 
 
-def analyze_with_gemini(company_name, summary, pain_points, signals) -> dict:
-    
+def analyze_with_gemini(contact_name, contact_title, hotel_name, summary, pain_points, signals, contact_summary) -> dict:
+
     pain_str = "\n".join(pain_points)
     signal_str = "\n".join(signals)
-    
+
     prompt = f"""You are a B2B sales analyst for J.A. Uniforms, a premium uniform supplier for hotels.
 
 Analyze this lead and provide scoring:
 
-Company: {company_name}
-Summary: {summary}
+Hotel: {hotel_name}
+Hotel Summary: {summary}
 Pain Points: {pain_str}
 Buying Signals: {signal_str}
+
+Contact: {contact_name} — {contact_title}
+Contact Background: {contact_summary}
 
 J.A. Uniforms offers: custom uniforms, bulk ordering, 48-hour delivery, inventory management portal, size profiles per employee.
 
@@ -58,17 +55,18 @@ VALUE_PROPS: [specific value prop 1] | [specific value prop 2] | [specific value
 Score high (80-100) if: large hospitality company, multiple locations, staff uniformity matters
 Score medium (50-79) if: smaller hotel, some uniform needs
 Score low (0-49) if: not hospitality related
-"""
-    
+
+Make value props specific to {contact_title}'s priorities and responsibilities."""
+
     response = llm.invoke([HumanMessage(content=prompt)])
     return parse_response(response.content)
 
 
 def parse_response(response: str) -> dict:
     lines = response.strip().split("\n")
-    
+
     result = {"fit_score": 50, "value_props": []}
-    
+
     for line in lines:
         if line.startswith("FIT_SCORE:"):
             try:
@@ -78,5 +76,5 @@ def parse_response(response: str) -> dict:
         elif line.startswith("VALUE_PROPS:"):
             props = line.replace("VALUE_PROPS:", "").strip()
             result["value_props"] = [p.strip() for p in props.split("|")]
-    
+
     return result

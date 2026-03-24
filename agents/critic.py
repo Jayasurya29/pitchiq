@@ -44,24 +44,26 @@ Body: {body}
 LINKEDIN MESSAGE:
 {linkedin_message}
 
-Evaluate strictly on these criteria:
-
-Email checks:
+Evaluate the EMAIL strictly on these criteria:
 1. Does it address {first_name} by name?
-2. Does it sound human and conversational? (not robotic or templated)
+2. Does it sound human and conversational?
 3. Is the body under 120 words?
 4. Does it have exactly ONE clear call to action?
-5. Is it free of buzzwords and corporate speak?
-6. Does it reference something specific about the hotel or their role?
+5. Is it free of buzzwords?
+6. Does it reference something specific about the hotel or role?
 
-LinkedIn message checks:
+Evaluate the LINKEDIN MESSAGE separately:
 7. Is it under 300 characters?
-8. Does it NOT pitch anything — just request to connect?
-9. Does it sound genuine and not salesy?
+8. Does it NOT pitch anything?
+9. Does it sound genuine?
+
+IMPORTANT: Base APPROVED only on the EMAIL criteria (1-6).
+LinkedIn quality is tracked separately.
 
 Return in this exact format:
-APPROVED: [YES or NO]
-FEEDBACK: [one sentence feedback covering both messages]
+APPROVED: [YES or NO — based on EMAIL only]
+FEEDBACK: [one sentence feedback on the email]
+LINKEDIN_FEEDBACK: [one sentence feedback on LinkedIn message]
 """
 
     response = llm_lite.invoke([HumanMessage(content=prompt)])

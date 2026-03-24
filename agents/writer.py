@@ -67,11 +67,15 @@ Rules:
 - Sound human and conversational
 - Sign off as Jay from J.A. Uniforms
 
-Return in this exact format:
+
+Return in this EXACT format — do not skip any labels:
 SUBJECT: [subject line]
 BODY:
 [email body here]
+
+IMPORTANT: BODY: label is mandatory. Always include it on its own line.
 """
+    
 
     response = llm.invoke([HumanMessage(content=prompt)])
     return parse_email(response.content)
@@ -110,25 +114,32 @@ Return ONLY the message text, nothing else."""
 
 
 def parse_email(response: str) -> dict:
-    lines = response.strip().split("\n")
-
     subject = ""
     body_lines = []
     in_body = False
+    found_body_tag = False
+
+    lines = response.strip().split("\n")
 
     for line in lines:
-        if line.startswith("SUBJECT:"):
-            subject = line.replace("SUBJECT:", "").strip()
-        elif line.strip().startswith("BODY:"):
+        if line.upper().startswith("SUBJECT:"):
+            subject = line.split(":", 1)[1].strip()
+            in_body = True  # Start capturing after subject
+        elif line.upper().startswith("BODY:"):
+            found_body_tag = True
             in_body = True
-            # Capture anything after BODY: on the same line
-            rest = line.replace("BODY:", "").strip()
+            rest = line.split(":", 1)[1].strip()
             if rest:
                 body_lines.append(rest)
         elif in_body:
             body_lines.append(line)
 
+    body = "\n".join(body_lines).strip()
+
+    if not body:
+        body = response.strip()
+
     return {
         "subject": subject,
-        "body": "\n".join(body_lines).strip()
+        "body": body
     }

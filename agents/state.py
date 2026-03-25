@@ -14,7 +14,11 @@ class PitchState(TypedDict):
     recent_news: Optional[list[str]]
     pain_points: Optional[list[str]]
     signals: Optional[list[str]]
-    contact_summary: Optional[str]      # what we found about the person
+    contact_summary: Optional[str]
+    outreach_angle: Optional[str]
+    personalization_hook: Optional[str]
+    hotel_tier: Optional[str]
+    hiring_signals: Optional[list[str]]
 
     # Analyst fills these
     fit_score: Optional[int]
@@ -23,7 +27,7 @@ class PitchState(TypedDict):
     # Writer fills these
     email_subject: Optional[str]
     email_body: Optional[str]
-    linkedin_message: Optional[str]     # short linkedin connection message
+    linkedin_message: Optional[str]
 
     # Critic fills these
     quality_approved: Optional[bool]

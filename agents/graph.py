@@ -47,29 +47,32 @@ def build_graph():
 
 if __name__ == "__main__":
     pipeline = build_graph()
-
     result = pipeline.invoke({
-        "contact_name": "John Smith",
-        "contact_title": "General Manager",
-        "hotel_name": "Marriott Biscayne Bay",
-        "hotel_location": "Miami, FL",
-        "linkedin_url": None,
-        "email": None,
-        "company_summary": None,
-        "recent_news": None,
-        "pain_points": None,
-        "signals": None,
-        "contact_summary": None,
-        "fit_score": None,
-        "value_props": None,
-        "email_subject": None,
-        "email_body": None,
-        "linkedin_message": None,
-        "quality_approved": None,
-        "quality_feedback": None,
-        "send_time": None,
-        "rewrite_count": None,
-        "follow_up_sequence": None
+    "contact_name": "John Smith",
+    "contact_title": "General Manager",
+    "hotel_name": "Marriott Biscayne Bay",
+    "hotel_location": "Miami, FL",
+    "linkedin_url": None,
+    "email": None,
+    "company_summary": None,
+    "recent_news": None,
+    "pain_points": None,
+    "signals": None,
+    "contact_summary": None,
+    "outreach_angle": None,
+    "personalization_hook": None,
+    "hotel_tier": None,
+    "hiring_signals": None,
+    "fit_score": None,
+    "value_props": None,
+    "email_subject": None,
+    "email_body": None,
+    "linkedin_message": None,
+    "quality_approved": None,
+    "quality_feedback": None,
+    "rewrite_count": None,
+    "send_time": None,
+    "follow_up_sequence": None
     })
 
     print("\n" + "="*40)
@@ -77,6 +80,10 @@ if __name__ == "__main__":
     print("="*40)
     print(f"Contact: {result['contact_name']} — {result['contact_title']}")
     print(f"Hotel: {result['hotel_name']}")
+    print(f"Hotel Tier: {result['hotel_tier']}")
+    print(f"Outreach Angle: {result['outreach_angle']}")
+    print(f"Personalization Hook: {result['personalization_hook']}")
+    print(f"Hiring Signals: {result['hiring_signals']}")
     print(f"Fit Score: {result['fit_score']}/100")
     print(f"Quality Approved: {result['quality_approved']}")
     print(f"Send Time: {result['send_time']}")

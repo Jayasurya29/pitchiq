@@ -1,0 +1,16 @@
+# STEP 1 — Save your work
+git add .
+git commit -m "message"
+git push origin jay-dev
+
+# STEP 2 — Go to GitHub → create PR → merge it
+
+# STEP 3 — Sync everything
+git checkout main
+git pull
+git checkout jay-dev
+git merge main
+git push origin jay-dev
+
+
+.\venv\Scripts\activate

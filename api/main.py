@@ -192,7 +192,6 @@ async def research_stream(
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
 
-
 @app.get("/history")
 def get_history():
     db = SessionLocal()
@@ -201,9 +200,12 @@ def get_history():
     return [
         {
             "id": r.id,
-            "company_name": r.company_name,
+            "contact_name": r.contact_name,
+            "contact_title": r.contact_title,
+            "hotel_name": r.hotel_name,
             "fit_score": r.fit_score,
             "email_subject": r.email_subject,
+            "linkedin_message": r.linkedin_message,
             "quality_approved": r.quality_approved,
             "approval_status": r.approval_status,
             "created_at": str(r.created_at)
@@ -220,10 +222,13 @@ def get_pending():
     return [
         {
             "id": r.id,
-            "company_name": r.company_name,
+            "contact_name": r.contact_name,
+            "contact_title": r.contact_title,
+            "hotel_name": r.hotel_name,
             "fit_score": r.fit_score,
             "email_subject": r.email_subject,
             "email_body": r.email_body,
+            "linkedin_message": r.linkedin_message,
             "pain_points": r.pain_points,
             "value_props": r.value_props,
             "send_time": r.send_time,

@@ -1,23 +1,23 @@
 from dotenv import load_dotenv
 import os
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 
-# Load .env once here — not in every file
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'), override=True)
 
-# API Keys
+# API Keys (still needed for other services)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 APOLLO_API_KEY = os.getenv("APOLLO_API_KEY")
 
-# Gemini 2.5 Flash — best for writing, analysis, extraction
-llm = ChatGoogleGenerativeAI(
+# Vertex AI — uses application default credentials (no API key needed)
+llm = ChatVertexAI(
     model="gemini-2.5-flash",
-    google_api_key=GEMINI_API_KEY
+    project="project-3f0ad791-9586-4f2b-a72",
+    location="us-central1"
 )
 
-# Gemini 2.5 Flash Lite — best for classification, quick checks
-llm_lite = ChatGoogleGenerativeAI(
+llm_lite = ChatVertexAI(
     model="gemini-2.5-flash-lite",
-    google_api_key=GEMINI_API_KEY
+    project="project-3f0ad791-9586-4f2b-a72",
+    location="us-central1"
 )

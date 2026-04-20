@@ -7,6 +7,7 @@ import os
 import asyncio
 import json
 import concurrent.futures
+from database.models import ResearchHistory
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -279,3 +280,62 @@ def reject_email(research_id: int, feedback: str = ""):
     if not record:
         raise HTTPException(status_code=404, detail="Research not found")
     return {"message": f"Email rejected", "id": research_id}
+
+@app.post("/sequence/{research_id}")
+def generate_sequence(research_id: int):
+    db = SessionLocal()
+    record = db.query(ResearchHistory).filter(ResearchHistory.id == research_id).first()
+    db.close()
+    
+    if not record:
+        raise HTTPException(status_code=404, detail="Research not found")
+    
+    from agents.config import llm
+    from langchain_core.messages import HumanMessage
+    import json
+    import re
+    
+    prompt = f"""
+You are a B2B sales expert. Generate a 3-touch email sequence for hotel uniform sales.
+
+Contact: {record.contact_name} — {record.contact_title}
+Hotel: {record.hotel_name}
+Original email: {record.email_body}
+Pain points: {record.pain_points}
+Value props: {record.value_props}
+
+Return ONLY this JSON, no markdown:
+{{
+  "touches": [
+    {{
+      "day": 0,
+      "type": "Intro",
+      "subject": "{record.email_subject}",
+      "body": "{record.email_body}"
+    }},
+    {{
+      "day": 5,
+      "type": "Value Hook",
+      "subject": "...",
+      "body": "..."
+    }},
+    {{
+      "day": 12,
+      "type": "Breakup",
+      "subject": "...",
+      "body": "..."
+    }}
+  ]
+}}
+
+Touch 1: Use the original email exactly as provided
+Touch 2: Lead with a specific value prop, reference their pain point
+Touch 3: Short breakup email, 3-4 lines max, create gentle urgency
+"""
+    
+    response = llm.invoke([HumanMessage(content=prompt)])
+    text = response.content.strip()
+    text = re.sub(r'```json|```', '', text).strip()
+    sequence = json.loads(text)
+    
+    return sequence

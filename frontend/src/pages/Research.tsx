@@ -1,402 +1,287 @@
-import { useState } from 'react'
-import axios from 'axios'
+import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { Loader2, Search } from "lucide-react";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { api } from "@/lib/api";
 
-const API_URL = 'http://localhost:8000'
-
-interface ResearchResult {
-  contact_name: string
-  contact_title: string
-  hotel_name: string
-  fit_score: number
-  pain_points: string[]
-  value_props: string[]
-  email_subject: string
-  email_body: string
-  linkedin_message: string
-  quality_approved: boolean
-  send_time: string
-  follow_up_sequence: string[]
+interface Contact {
+  contact_name: string;
+  contact_title: string;
+  hotel_name: string;
+  hotel_location: string;
+  linkedin_url: string;
+  email: string;
 }
 
-const OUTREACH_GOALS = [
-  { id: 'demo', label: 'Book a Demo', icon: '◈' },
-  { id: 'intro', label: 'Intro Call', icon: '◎' },
-  { id: 'followup', label: 'Follow-up', icon: '↻' },
-  { id: 'partnership', label: 'Partnership', icon: '⟡' },
-]
+interface ResearchResult {
+  contact_name: string;
+  contact_title: string;
+  hotel_name: string;
+  fit_score: number;
+  pain_points: string[];
+  value_props: string[];
+  email_subject: string;
+  email_body: string;
+  linkedin_message: string;
+  quality_approved: boolean;
+  send_time: string;
+  follow_up_sequence: string[];
+}
 
-const PROGRESS_STEPS = [
-  { label: 'Searching', sub: 'Scanning signals' },
-  { label: 'Analyzing', sub: 'Scoring lead' },
-  { label: 'Drafting', sub: 'Writing outreach' },
-]
+const empty: Contact = {
+  contact_name: "",
+  contact_title: "",
+  hotel_name: "",
+  hotel_location: "",
+  linkedin_url: "",
+  email: "",
+};
+
+const inputCls =
+  "h-9 w-full rounded-md border border-stone-200 bg-white px-3 text-sm placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-200";
+
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-stone-700">
+        {label}
+        {required && <span className="text-red-500 ml-0.5">*</span>}
+      </span>
+      {children}
+    </label>
+  );
+}
 
 export default function Research() {
-  const [form, setForm] = useState({
-    contact_name: '',
-    contact_title: '',
-    hotel_name: '',
-    hotel_location: '',
-    linkedin_url: '',
-    email: ''
-  })
-  const [goal, setGoal] = useState('intro')
-  const [tone, setTone] = useState('friendly')
-  const [notes, setNotes] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [progressStep, setProgressStep] = useState(0)
-  const [result, setResult] = useState<ResearchResult | null>(null)
-  const [error, setError] = useState('')
-  const [copied, setCopied] = useState<string | null>(null)
+  const navigate = useNavigate();
+  const [contact, setContact] = useState<Contact>(empty);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ResearchResult | null>(null);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
 
-  const handleSubmit = async () => {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    setProgressStep(0)
+  const valid =
+    contact.contact_name.trim() &&
+    contact.hotel_name.trim() &&
+    contact.hotel_location.trim();
 
-    const stepTimers = [
-      setTimeout(() => setProgressStep(1), 8000),
-      setTimeout(() => setProgressStep(2), 18000),
-    ]
-
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!valid) return;
+    setLoading(true);
+    setError("");
+    setResult(null);
     try {
-      const response = await axios.post(`${API_URL}/research`, form)
-      setResult(response.data)
+      const { data } = await api.post("/research", contact);
+      setResult(data);
     } catch {
-      setError('Pipeline failed. Make sure the API is running.')
+      setError("Something went wrong. Check the backend is running.");
     } finally {
-      stepTimers.forEach(clearTimeout)
-      setLoading(false)
+      setLoading(false);
     }
   }
 
-  const copy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(key)
-    setTimeout(() => setCopied(null), 2000)
+  function field<K extends keyof Contact>(k: K) {
+    return {
+      value: contact[k] ?? "",
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+        setContact({ ...contact, [k]: e.target.value }),
+    };
+  }
+
+  function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
   }
 
   const scoreColor = (score: number) => {
-    if (score >= 80) return '#10b981'
-    if (score >= 60) return '#f59e0b'
-    return '#ef4444'
-  }
-
-  const isActive = loading || result !== null
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-amber-600";
+    return "text-red-600";
+  };
 
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold mb-1" style={{color: '#111827'}}>
-          Research a contact
-        </h1>
-        <p className="text-sm" style={{color: '#6b7280'}}>
-          Generate hyper-personalized outreach for any hotel decision-maker.
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Research a contact</h1>
+        <p className="mt-1 text-sm text-stone-500">
+          Paste a hotel decision-maker's details. The agents will research, score,
+          and draft outreach. The draft lands in Pending for your approval.
         </p>
-      </div>
+      </header>
 
-      <div className={`grid gap-6 transition-all duration-500 ${isActive ? 'grid-cols-2' : 'grid-cols-1 max-w-lg'}`}>
-
-        {/* Form */}
-        <div className="rounded-xl p-5 space-y-4 h-fit" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-
-          {/* Goal */}
+      <Card>
+        <CardHeader>
           <div>
-            <label className="block text-xs font-medium mb-2" style={{color: '#374151'}}>Outreach goal</label>
-            <div className="grid grid-cols-2 gap-2">
-              {OUTREACH_GOALS.map(g => (
-                <button
-                  key={g.id}
-                  onClick={() => setGoal(g.id)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all text-left"
-                  style={{
-                    background: goal === g.id ? '#eef2ff' : '#f9fafb',
-                    border: `1px solid ${goal === g.id ? '#6366f1' : '#e5e7eb'}`,
-                    color: goal === g.id ? '#6366f1' : '#6b7280'
-                  }}
-                >
-                  <span className="text-xs">{g.icon}</span>
-                  <span className="text-xs font-medium">{g.label}</span>
-                </button>
+            <h2 className="text-sm font-medium">Contact details</h2>
+            <p className="text-xs text-stone-500 mt-0.5">
+              At minimum: name, hotel, and location.
+            </p>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <form onSubmit={submit} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Contact name" required>
+                <input {...field("contact_name")} placeholder="e.g. Maya Rodriguez" className={inputCls} />
+              </Field>
+              <Field label="Title">
+                <input {...field("contact_title")} placeholder="e.g. GM, Director of Operations" className={inputCls} />
+              </Field>
+              <Field label="Hotel name" required>
+                <input {...field("hotel_name")} placeholder="e.g. The Langham Chicago" className={inputCls} />
+              </Field>
+              <Field label="Hotel location" required>
+                <input {...field("hotel_location")} placeholder="e.g. Chicago, IL" className={inputCls} />
+              </Field>
+              <Field label="LinkedIn URL">
+                <input {...field("linkedin_url")} placeholder="https://linkedin.com/in/..." className={inputCls} />
+              </Field>
+              <Field label="Email">
+                <input {...field("email")} type="email" placeholder="contact@hotel.com" className={inputCls} />
+              </Field>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Button type="submit" disabled={!valid || loading}>
+                {loading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Running agents…
+                  </>
+                ) : (
+                  <>
+                    <Search size={14} />
+                    Start research
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => { setContact(empty); setResult(null); setError(""); }}
+              >
+                Clear
+              </Button>
+              {error && <span className="text-xs text-red-600">{error}</span>}
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      {result && (
+        <>
+          {/* Score card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold">{result.contact_name}</h2>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    {result.contact_title} · <span className="text-stone-700">{result.hotel_name}</span>
+                  </p>
+                </div>
+                <span className={`ml-auto text-2xl font-bold tabular-nums ${scoreColor(result.fit_score)}`}>
+                  {result.fit_score}
+                  <span className="text-sm font-normal text-stone-400">/100</span>
+                </span>
+              </div>
+              <Button size="sm" onClick={() => navigate("/pending")}>
+                Go to Pending
+              </Button>
+            </CardHeader>
+          </Card>
+
+          {/* Conversation hooks */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-medium">Conversation hooks</h2>
+            </CardHeader>
+            <CardBody className="space-y-2">
+              {result.pain_points.map((point, i) => (
+                <div key={i} className="flex gap-2.5 items-start">
+                  <span className="text-xs font-semibold mt-0.5 flex-shrink-0 text-blue-600">{i + 1}.</span>
+                  <p className="text-xs leading-relaxed text-stone-600">{point}</p>
+                </div>
               ))}
-            </div>
-          </div>
+            </CardBody>
+          </Card>
 
-          {/* Tone */}
-          <div>
-            <label className="block text-xs font-medium mb-2" style={{color: '#374151'}}>Tone</label>
-            <div className="flex gap-1 p-1 rounded-lg" style={{background: '#f3f4f6'}}>
-              {['Formal', 'Friendly', 'Direct'].map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTone(t.toLowerCase())}
-                  className="flex-1 py-1.5 text-xs rounded-md font-medium transition-all"
-                  style={{
-                    background: tone === t.toLowerCase() ? '#ffffff' : 'transparent',
-                    color: tone === t.toLowerCase() ? '#111827' : '#9ca3af',
-                    boxShadow: tone === t.toLowerCase() ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                  }}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Fields */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{color: '#374151'}}>Name</label>
-              <input
-                type="text"
-                placeholder="John Smith"
-                value={form.contact_name}
-                onChange={e => setForm({...form, contact_name: e.target.value})}
-                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-all"
-                style={{background: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827'}}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{color: '#374151'}}>Title</label>
-              <input
-                type="text"
-                placeholder="GM"
-                value={form.contact_title}
-                onChange={e => setForm({...form, contact_title: e.target.value})}
-                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-all"
-                style={{background: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827'}}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{color: '#374151'}}>Hotel</label>
-            <input
-              type="text"
-              placeholder="Marriott Biscayne Bay"
-              value={form.hotel_name}
-              onChange={e => setForm({...form, hotel_name: e.target.value})}
-              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-all"
-              style={{background: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827'}}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{color: '#374151'}}>Location</label>
-              <input
-                type="text"
-                placeholder="Miami, FL"
-                value={form.hotel_location}
-                onChange={e => setForm({...form, hotel_location: e.target.value})}
-                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-all"
-                style={{background: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827'}}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{color: '#374151'}}>Email</label>
-              <input
-                type="email"
-                placeholder="john@marriott.com"
-                value={form.email}
-                onChange={e => setForm({...form, email: e.target.value})}
-                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-all"
-                style={{background: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827'}}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{color: '#374151'}}>
-              LinkedIn <span style={{color: '#9ca3af', fontWeight: 400}}>optional</span>
-            </label>
-            <input
-              type="text"
-              placeholder="linkedin.com/in/..."
-              value={form.linkedin_url}
-              onChange={e => setForm({...form, linkedin_url: e.target.value})}
-              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-all"
-              style={{background: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827'}}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{color: '#374151'}}>
-              Context notes <span style={{color: '#9ca3af', fontWeight: 400}}>optional</span>
-            </label>
-            <textarea
-              placeholder="Any extra context for the AI..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={2}
-              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-all resize-none"
-              style={{background: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827'}}
-            />
-          </div>
-
-          <button
-            onClick={handleSubmit}
-            disabled={loading || !form.contact_name || !form.hotel_name}
-            className="w-full text-white text-sm font-medium py-2.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{background: '#6366f1'}}
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Running pipeline...
-              </span>
-            ) : 'Run pipeline →'}
-          </button>
-
-          {error && (
-            <p className="text-xs text-center" style={{color: '#ef4444'}}>{error}</p>
-          )}
-        </div>
-
-        {/* Results */}
-        {isActive && (
-          <div className="space-y-3">
-
-            {/* Progress */}
-            {loading && (
-              <div className="rounded-xl p-5" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-                <p className="text-xs font-medium mb-4" style={{color: '#374151'}}>Pipeline running</p>
-                <div className="space-y-4">
-                  {PROGRESS_STEPS.map((step, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div
-                        className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
-                        style={{
-                          borderColor: i < progressStep ? '#10b981' : i === progressStep ? '#6366f1' : '#e5e7eb',
-                          background: i < progressStep ? '#ecfdf5' : i === progressStep ? '#eef2ff' : '#f9fafb'
-                        }}
-                      >
-                        {i < progressStep ? (
-                          <span style={{color: '#10b981', fontSize: '11px'}}>✓</span>
-                        ) : i === progressStep ? (
-                          <div className="w-2 h-2 rounded-full animate-pulse" style={{background: '#6366f1'}} />
-                        ) : null}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium" style={{color: i <= progressStep ? '#111827' : '#d1d5db'}}>{step.label}</p>
-                        <p className="text-xs" style={{color: i === progressStep ? '#6b7280' : '#d1d5db'}}>{step.sub}</p>
-                      </div>
-                    </div>
-                  ))}
+          {/* Email */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-medium">Draft email</h2>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => copy(result.email_body, "email")}
+              >
+                {copied === "email" ? "Copied!" : "Copy"}
+              </Button>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">Subject</div>
+                <div className="text-sm font-medium">{result.email_subject}</div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">Body</div>
+                <div className="whitespace-pre-wrap text-sm leading-relaxed text-stone-700">
+                  {result.email_body}
                 </div>
               </div>
-            )}
+            </CardBody>
+          </Card>
 
-            {result && (
-              <>
-                {/* Score */}
-                <div className="rounded-xl p-4 flex items-center justify-between" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-                  <div>
-                    <p className="text-sm font-semibold" style={{color: '#111827'}}>
-                      {result.contact_name}
-                      <span style={{color: '#6b7280', fontWeight: 400}}> · {result.contact_title}</span>
-                    </p>
-                    <p className="text-xs mt-0.5" style={{color: '#9ca3af'}}>{result.hotel_name}</p>
+          {/* LinkedIn */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-medium">LinkedIn message</h2>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => copy(result.linkedin_message, "linkedin")}
+              >
+                {copied === "linkedin" ? "Copied!" : "Copy"}
+              </Button>
+            </CardHeader>
+            <CardBody>
+              <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">Connection note</div>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-stone-700">
+                {result.linkedin_message}
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Schedule */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-medium">Schedule</h2>
+            </CardHeader>
+            <CardBody>
+              <p className="text-sm text-stone-700 mb-2">{result.send_time}</p>
+              <div className="space-y-1.5">
+                {result.follow_up_sequence.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-1 h-1 rounded-full bg-stone-300 flex-shrink-0" />
+                    <p className="text-xs text-stone-500">{f}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold tabular-nums" style={{color: scoreColor(result.fit_score)}}>
-                      {result.fit_score}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-widest" style={{color: '#9ca3af'}}>fit score</p>
-                  </div>
-                </div>
-
-                {/* Recommended angle */}
-                <div className="rounded-xl p-4" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-                  <p className="text-xs font-medium mb-2" style={{color: '#374151'}}>Recommended angle</p>
-                  <p className="text-sm leading-relaxed" style={{color: '#4b5563'}}>{result.value_props[0]}</p>
-                </div>
-
-                {/* Conversation hooks */}
-                <div className="rounded-xl p-4" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-                  <p className="text-xs font-medium mb-3" style={{color: '#374151'}}>Conversation hooks</p>
-                  <div className="space-y-2">
-                    {result.pain_points.map((point, i) => (
-                      <div key={i} className="flex gap-2.5 items-start">
-                        <span className="text-xs font-semibold mt-0.5 flex-shrink-0" style={{color: '#6366f1'}}>{i + 1}.</span>
-                        <p className="text-xs leading-relaxed" style={{color: '#6b7280'}}>{point}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Email */}
-                <div className="rounded-xl p-4" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-medium" style={{color: '#374151'}}>Draft email</p>
-                    <button
-                      onClick={() => copy(result.email_body, 'email')}
-                      className="text-xs px-2 py-1 rounded-md transition-all"
-                      style={{
-                        background: copied === 'email' ? '#ecfdf5' : '#f3f4f6',
-                        color: copied === 'email' ? '#10b981' : '#6b7280',
-                        border: '1px solid #e5e7eb'
-                      }}
-                    >
-                      {copied === 'email' ? '✓ Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className="text-xs font-medium mb-3 pb-3" style={{color: '#374151', borderBottom: '1px solid #f3f4f6'}}>
-                    {result.email_subject}
-                  </p>
-                  <p className="text-sm leading-relaxed whitespace-pre-line" style={{color: '#4b5563'}}>
-                    {result.email_body}
-                  </p>
-                </div>
-
-                {/* LinkedIn */}
-                <div className="rounded-xl p-4" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-medium" style={{color: '#374151'}}>LinkedIn message</p>
-                    <button
-                      onClick={() => copy(result.linkedin_message, 'linkedin')}
-                      className="text-xs px-2 py-1 rounded-md transition-all"
-                      style={{
-                        background: copied === 'linkedin' ? '#ecfdf5' : '#f3f4f6',
-                        color: copied === 'linkedin' ? '#10b981' : '#6b7280',
-                        border: '1px solid #e5e7eb'
-                      }}
-                    >
-                      {copied === 'linkedin' ? '✓ Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className="text-sm leading-relaxed" style={{color: '#4b5563'}}>{result.linkedin_message}</p>
-                </div>
-
-                {/* Schedule */}
-                <div className="rounded-xl p-4" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-                  <p className="text-xs font-medium mb-3" style={{color: '#374151'}}>Schedule</p>
-                  <p className="text-xs mb-2" style={{color: '#6b7280'}}>{result.send_time}</p>
-                  <div className="space-y-1.5">
-                    {result.follow_up_sequence.map((f, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className="w-1 h-1 rounded-full flex-shrink-0" style={{background: '#d1d5db'}} />
-                        <p className="text-xs" style={{color: '#9ca3af'}}>{f}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Regenerate */}
-                <button
-                  onClick={handleSubmit}
-                  className="w-full text-sm py-2.5 rounded-xl transition-all"
-                  style={{background: '#ffffff', border: '1px solid #e5e7eb', color: '#6b7280'}}
-                >
-                  ↻ Regenerate
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        </>
+      )}
     </div>
-  )
+  );
 }

@@ -1,141 +1,144 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_URL = 'http://localhost:8000'
+import { useState, useEffect } from "react";
+import { Loader2, History as HistoryIcon } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { api } from "@/lib/api";
 
 interface HistoryRecord {
-  id: number
-  contact_name: string
-  contact_title: string
-  hotel_name: string
-  fit_score: number
-  email_subject: string
-  quality_approved: boolean
-  approval_status: string
-  created_at: string
+  id: number;
+  contact_name: string;
+  contact_title: string;
+  hotel_name: string;
+  hotel_location: string;
+  fit_score: number;
+  email_subject: string;
+  quality_approved: boolean;
+  approval_status: string;
+  created_at: string;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "approved") return <Badge variant="success">sent</Badge>;
+  if (status === "rejected") return <Badge variant="muted">rejected</Badge>;
+  return <Badge variant="default">pending</Badge>;
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="text-left font-medium px-4 py-2">{children}</th>;
+}
+
+function Td({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <td className={`px-4 py-3 align-top ${className}`}>{children}</td>;
 }
 
 export default function History() {
-  const [records, setRecords] = useState<HistoryRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [records, setRecords] = useState<HistoryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await axios.get(`${API_URL}/history`)
-        setRecords(response.data)
+        const { data } = await api.get("/history");
+        setRecords(data);
       } catch {
-        console.error('Failed to fetch history')
+        console.error("Failed to fetch history");
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
-    fetchHistory()
-  }, [])
+    };
+    fetchHistory();
+  }, []);
 
-  const scoreColor = (score: number) => {
-    if (score >= 80) return '#10b981'
-    if (score >= 60) return '#f59e0b'
-    return '#ef4444'
-  }
-
-  const statusStyle = (status: string) => {
-    if (status === 'approved') return { color: '#10b981', background: '#ecfdf5', border: '1px solid #a7f3d0' }
-    if (status === 'rejected') return { color: '#ef4444', background: '#fef2f2', border: '1px solid #fecaca' }
-    return { color: '#f59e0b', background: '#fffbeb', border: '1px solid #fde68a' }
-  }
-
-  if (loading) return (
-    <div className="flex items-center gap-2 text-sm" style={{color: '#9ca3af'}}>
-      <div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{borderColor: '#e5e7eb', borderTopColor: '#6366f1'}} />
-      Loading...
-    </div>
-  )
-
-  const approved = records.filter(r => r.approval_status === 'approved').length
+  const approved = records.filter(r => r.approval_status === "approved").length;
   const avgScore = records.length
     ? Math.round(records.reduce((a, r) => a + r.fit_score, 0) / records.length)
-    : 0
+    : 0;
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold mb-1" style={{color: '#111827'}}>History</h1>
-        <p className="text-sm" style={{color: '#6b7280'}}>{records.length} total researches</p>
-      </div>
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">History</h1>
+        <p className="mt-1 text-sm text-stone-500">
+          Outreach that's already been sent or rejected.
+        </p>
+      </header>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total researches', value: records.length, color: '#6366f1' },
-          { label: 'Approved', value: approved, color: '#10b981' },
-          { label: 'Avg fit score', value: avgScore, color: '#f59e0b' },
+          { label: "Total researches", value: records.length },
+          { label: "Approved", value: approved },
+          { label: "Avg fit score", value: avgScore },
         ].map((stat, i) => (
-          <div key={i} className="rounded-xl p-4" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-            <p className="text-xs font-medium mb-2" style={{color: '#6b7280'}}>{stat.label}</p>
-            <p className="text-2xl font-bold tabular-nums" style={{color: stat.color}}>{stat.value}</p>
-          </div>
+          <Card key={i} className="p-4">
+            <p className="text-xs text-stone-500 mb-1">{stat.label}</p>
+            <p className="text-2xl font-bold tabular-nums text-stone-900">{stat.value}</p>
+          </Card>
         ))}
       </div>
 
-      {records.length === 0 ? (
-        <div className="rounded-xl p-16 text-center" style={{background: '#ffffff', border: '1px dashed #e5e7eb'}}>
-          <p className="text-sm" style={{color: '#9ca3af'}}>No research history yet</p>
-        </div>
-      ) : (
-        <div className="rounded-xl overflow-hidden" style={{background: '#ffffff', border: '1px solid #e5e7eb'}}>
-
-          {/* Header */}
-          <div className="grid grid-cols-12 px-5 py-3" style={{borderBottom: '1px solid #f3f4f6', background: '#f9fafb'}}>
-            <p className="col-span-3 text-xs font-medium" style={{color: '#6b7280'}}>Contact</p>
-            <p className="col-span-4 text-xs font-medium" style={{color: '#6b7280'}}>Subject</p>
-            <p className="col-span-2 text-xs font-medium text-center" style={{color: '#6b7280'}}>Score</p>
-            <p className="col-span-2 text-xs font-medium text-center" style={{color: '#6b7280'}}>Status</p>
-            <p className="col-span-1 text-xs font-medium text-right" style={{color: '#6b7280'}}>Date</p>
-          </div>
-
-          {/* Rows */}
-          {records.map((record, index) => (
-            <div
-              key={record.id}
-              className="grid grid-cols-12 px-5 py-3.5 items-center transition-colors hover:bg-gray-50"
-              style={{borderBottom: index !== records.length - 1 ? '1px solid #f3f4f6' : 'none'}}
-            >
-              <div className="col-span-3 flex items-center gap-3">
-                <div className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-semibold flex-shrink-0" style={{background: '#eef2ff', color: '#6366f1'}}>
-                  {record.contact_name.charAt(0)}
-                </div>
-                <div>
-                  <p className="text-sm font-medium" style={{color: '#111827'}}>{record.contact_name}</p>
-                  <p className="text-[10px] mt-0.5" style={{color: '#9ca3af'}}>{record.hotel_name}</p>
-                </div>
-              </div>
-
-              <div className="col-span-4 pr-4">
-                <p className="text-xs truncate" style={{color: '#6b7280'}}>{record.email_subject}</p>
-              </div>
-
-              <div className="col-span-2 text-center">
-                <span className="text-sm font-bold tabular-nums" style={{color: scoreColor(record.fit_score)}}>
-                  {record.fit_score}
-                </span>
-              </div>
-
-              <div className="col-span-2 text-center">
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={statusStyle(record.approval_status)}>
-                  {record.approval_status}
-                </span>
-              </div>
-
-              <div className="col-span-1 text-right">
-                <p className="text-[10px]" style={{color: '#9ca3af'}}>
-                  {new Date(record.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </p>
-              </div>
-            </div>
-          ))}
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-stone-500">
+          <Loader2 size={14} className="animate-spin" /> Loading…
         </div>
       )}
+
+      {!loading && records.length === 0 && (
+        <div className="rounded-lg border border-dashed border-stone-300 py-16 text-center">
+          <HistoryIcon size={28} className="mx-auto text-stone-400" />
+          <p className="mt-3 text-sm font-medium text-stone-700">No sent messages yet</p>
+        </div>
+      )}
+
+      {records.length > 0 && (
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
+              <tr>
+                <Th>Contact</Th>
+                <Th>Hotel</Th>
+                <Th>Subject</Th>
+                <Th>Score</Th>
+                <Th>Status</Th>
+                <Th>When</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r) => (
+                <tr
+                  key={r.id}
+                  className="border-t border-stone-100 hover:bg-stone-50/50"
+                >
+                  <Td>
+                    <div className="font-medium text-stone-900">{r.contact_name}</div>
+                    <div className="text-xs text-stone-500">{r.contact_title}</div>
+                  </Td>
+                  <Td>
+                    <div>{r.hotel_name}</div>
+                  </Td>
+                  <Td>
+                    <div className="text-xs text-stone-500 max-w-xs truncate">{r.email_subject}</div>
+                  </Td>
+                  <Td className="text-stone-700 font-medium">{r.fit_score}</Td>
+                  <Td>
+                    <StatusBadge status={r.approval_status} />
+                  </Td>
+                  <Td className="text-stone-500 text-xs">
+                    {formatDistanceToNow(new Date(r.created_at), { addSuffix: true })}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </div>
-  )
+  );
 }

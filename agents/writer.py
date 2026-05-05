@@ -1,145 +1,186 @@
+"""Agent 3 — Writer (v2 generic).
+
+What changed from v1:
+  - Brand-agnostic — uses get_company_background() / sender_signature() /
+    writer_sender_id() from _helpers instead of hardcoded "Jay from J.A.
+    Uniforms".
+  - Tone is timeline-aware (urgent for <6mo, confident for 6-12mo, etc.)
+  - Reads previous_feedback on retry — Writer knows EXACTLY what to fix
+    instead of just "generate again with the same prompt".
+  - rewrite_count properly tracked.
+"""
+
+from __future__ import annotations
+
+import logging
+
 from state import PitchState
-from config import llm
-from langchain_core.messages import HumanMessage
+from config import get_writer_llm
+from _helpers import (
+    get_company_background,
+    sender_signature,
+    writer_sender_id,
+    tone_for_timeline,
+    invoke_text,
+    fmt_known_context,
+)
+
+logger = logging.getLogger(__name__)
+
 
 def writer_agent(state: PitchState) -> PitchState:
-    """
-    Agent 3: Writer
-    Job: Write a personalized email AND a LinkedIn connection message
-    targeting the specific contact person
-    """
-
-    contact_name = state["contact_name"]
-    contact_title = state["contact_title"]
-    hotel_name = state["hotel_name"]
-    pain_points = state.get("pain_points", [])
-    value_props = state.get("value_props", [])
+    contact_name = state.get("contact_name", "")
+    contact_title = state.get("contact_title", "")
+    hotel_name = state.get("hotel_name", "")
     fit_score = state.get("fit_score", 0)
-    company_summary = state.get("company_summary", "")
-    contact_summary = state.get("contact_summary", "")
-    recent_news = state.get("recent_news", [])
+    primary_angle = state.get("primary_angle", "general")
+    value_props = state.get("value_props", []) or []
+    personalization_hook = state.get("personalization_hook", "") or ""
+    pain_points = state.get("pain_points") or []
+    sender_first_name = state.get("sender_first_name") or ""
 
-    print(f"✍️  Writing outreach for {contact_name} at {hotel_name}...")
+    # On retry, Writer reads the Critic's specific fix instructions
+    rewrite_count = state.get("rewrite_count") or 0
+    previous_feedback = state.get("previous_feedback", "") or ""
 
-    if fit_score < 30:
-        print(f"⚠️  Fit score too low ({fit_score}/100) — skipping")
-        return {**state, "email_subject": None, "email_body": None, "linkedin_message": None}
+    print(f"✍️  Writing outreach for {contact_name} (attempt {rewrite_count + 1})...")
 
-    email = generate_email(contact_name, contact_title, hotel_name, company_summary, contact_summary, pain_points, value_props, recent_news)
-    linkedin = generate_linkedin_message(contact_name, contact_title, hotel_name, company_summary, recent_news)
+    tone = tone_for_timeline(state.get("opening_date"))
+    company_bg = get_company_background()
+    sender_id = writer_sender_id(sender_first_name)
+    signature = sender_signature(sender_first_name)
+    known_context = fmt_known_context(state)
 
-    print(f"✅ Email and LinkedIn message written successfully")
+    feedback_block = ""
+    if previous_feedback and rewrite_count > 0:
+        feedback_block = f"""
+=== PREVIOUS DRAFT FAILED QUALITY CHECK ===
+The Critic gave specific fix instructions:
+{previous_feedback}
+
+You MUST address every issue above in this rewrite.
+"""
+
+    first_name = contact_name.split()[0] if contact_name else "there"
+
+    # ── Generate email ──
+    email_prompt = f"""You are {sender_id}, writing a cold outreach email.
+
+You work for: {company_bg}
+
+Tone for this email: {tone}
+
+=== CONTACT ===
+{contact_name} — {contact_title} at {hotel_name}
+Use first name only: {first_name}
+
+=== KNOWN CONTEXT ===
+{known_context}
+
+=== ANALYST'S FINDINGS ===
+Fit Score: {fit_score}/100
+Primary angle: {primary_angle}
+Value props you can use:
+{chr(10).join('- ' + p for p in value_props[:5])}
+
+=== PERSONALIZATION HOOK ===
+{personalization_hook or "(none — open with a different specific reference)"}
+
+=== PAIN POINTS YOU CAN REFERENCE ===
+{chr(10).join('- ' + p for p in pain_points[:3]) if pain_points else "(none)"}
+{feedback_block}
+=== YOUR TASK ===
+Write a cold outreach email. Format:
+
+SUBJECT: <8 words max, no buzzwords, hints at value or curiosity>
+
+<email body, 70-110 words, no markdown>
+
+Rules:
+- Address the recipient as "{first_name}" — first name only, never "Mr./Ms."
+- Open with the personalization hook OR a specific fact from research
+- Body: lead with ONE value prop tied to {primary_angle}
+- Single clear CTA at the end (suggest a 15-min call OR ask a specific question)
+- No "synergy", "leverage", "circle back", "touch base", "low-hanging fruit"
+- No emojis, no exclamation points except in subject (sparingly)
+- Sign off naturally with the signature below
+- DO NOT include "Subject:" prefix in the body
+
+Signature to use:
+{signature}
+
+Output format (be exact):
+SUBJECT: <subject line>
+
+<body>
+"""
+
+    raw = invoke_text(get_writer_llm(), email_prompt)
+    subject, body = _parse_email(raw)
+
+    # ── Generate LinkedIn message ──
+    linkedin_prompt = f"""You are {sender_id} sending a LinkedIn connection request.
+
+You work for: {company_bg}
+
+Recipient: {contact_name} — {contact_title} at {hotel_name}
+
+Personalization hook: {personalization_hook or "(none)"}
+Primary angle: {primary_angle}
+Tone: {tone}
+
+Write a SHORT (max 280 characters, ideally 200-250) LinkedIn note.
+
+Rules:
+  - Use first name only ("{first_name}")
+  - Reference one specific thing about them or the hotel
+  - One sentence on why you're connecting
+  - No CTA — this is a connection request, not a pitch
+  - No "I'd love to" / "I'd like to" / generic LinkedIn-speak
+  - Output ONLY the message text — no preamble, no markdown
+"""
+
+    linkedin_message = invoke_text(get_writer_llm(), linkedin_prompt)
+    # Trim to LinkedIn's 300 char limit
+    linkedin_message = linkedin_message[:300]
+
+    print("✅ Email + LinkedIn drafts complete")
 
     return {
         **state,
-        "email_subject": email["subject"],
-        "email_body": email["body"],
-        "linkedin_message": linkedin,
-        "rewrite_count": (state.get("rewrite_count") or 0) + 1
+        "email_subject": subject,
+        "email_body": body,
+        "linkedin_message": linkedin_message,
+        "rewrite_count": rewrite_count + 1,
     }
 
 
-def generate_email(contact_name, contact_title, hotel_name, summary, contact_summary, pain_points, value_props, recent_news) -> dict:
+def _parse_email(raw: str) -> tuple[str, str]:
+    """Pull SUBJECT and body out of the writer's output.
 
-    pain_str = "\n".join(pain_points)
-    value_str = "\n".join(value_props)
-    news_str = recent_news[0] if recent_news else ""
+    Tolerant of variations: 'Subject:', 'SUBJECT:', missing prefix, etc.
+    """
+    if not raw:
+        return ("", "")
 
-    prompt = f"""You are Jay, a sales rep at J.A. Uniforms writing a cold outreach email.
-
-Write a short, human, personalized cold email. NOT a template. NOT salesy.
-Sound like a real person who did their research.
-
-Contact: {contact_name}, {contact_title} at {hotel_name}
-About them: {contact_summary}
-About the hotel: {summary}
-Recent news: {news_str}
-Their pain points: {pain_str}
-What we offer them: {value_str}
-
-Rules:
-- Address {contact_name} by first name
-- Reference their specific role as {contact_title}
-- Maximum 100 words in the body
-- No buzzwords (no "synergy", "leverage", "revolutionary")
-- Reference one specific pain point or recent news if available
-- One clear call to action (15 minute call)
-- Sound human and conversational
-- Sign off as Jay from J.A. Uniforms
-
-
-Return in this EXACT format — do not skip any labels:
-SUBJECT: [subject line]
-BODY:
-[email body here]
-
-IMPORTANT: BODY: label is mandatory. Always include it on its own line.
-"""
-    
-
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return parse_email(response.content)
-
-
-def generate_linkedin_message(contact_name, contact_title, hotel_name, summary, recent_news) -> str:
-    """Generate a short LinkedIn connection request message"""
-
-    news_str = recent_news[0] if recent_news else ""
-    first_name = contact_name.split()[0]
-
-    prompt = f"""You are Jay from J.A. Uniforms sending a LinkedIn connection request.
-
-Write a short, specific, human LinkedIn connection message.
-
-Contact: {contact_name}, {contact_title} at {hotel_name}
-Hotel summary: {summary}
-Recent news about hotel: {news_str}
-
-Rules:
-- Address them as {first_name} only
-- Maximum 300 characters — count carefully
-- Do NOT use words like "pleased", "esteemed", "appreciate", "regards"
-- Do NOT compliment them — just connect naturally
-- Reference ONE specific thing about {hotel_name} or their role
-- Sound like a real person texting, not a formal letter
-- No sign off, no "regards", no "best"
-
-Example of good tone:
-"Hi John, noticed Marriott Biscayne is expanding its team — would love to connect and share something useful for your ops."
-
-Return ONLY the message text, nothing else."""
-
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return response.content.strip()
-
-
-def parse_email(response: str) -> dict:
+    lines = raw.strip().split("\n")
     subject = ""
-    body_lines = []
-    in_body = False
-    found_body_tag = False
+    body_start_idx = 0
 
-    lines = response.strip().split("\n")
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.lower().startswith("subject:"):
+            subject = stripped.split(":", 1)[1].strip()
+            body_start_idx = i + 1
+            break
 
-    for line in lines:
-        if line.upper().startswith("SUBJECT:"):
-            subject = line.split(":", 1)[1].strip()
-            in_body = True  # Start capturing after subject
-        elif line.upper().startswith("BODY:"):
-            found_body_tag = True
-            in_body = True
-            rest = line.split(":", 1)[1].strip()
-            if rest:
-                body_lines.append(rest)
-        elif in_body:
-            body_lines.append(line)
+    if not subject:
+        # No SUBJECT prefix found — first non-empty line is the subject
+        for i, line in enumerate(lines):
+            if line.strip():
+                subject = line.strip()
+                body_start_idx = i + 1
+                break
 
-    body = "\n".join(body_lines).strip()
-
-    if not body:
-        body = response.strip()
-
-    return {
-        "subject": subject,
-        "body": body
-    }
+    body = "\n".join(lines[body_start_idx:]).strip()
+    return (subject, body)

@@ -7,30 +7,34 @@ interface Props {
   onSelect: (id: number) => void;
 }
 
-function scoreBadgeClass(score: number): string {
-  if (score >= 80) return "bg-emerald-100 text-emerald-800 ring-emerald-200";
-  if (score >= 60) return "bg-amber-100 text-amber-800 ring-amber-200";
-  if (score >= 40) return "bg-sky-100 text-sky-800 ring-sky-200";
-  return "bg-stone-100 text-stone-700 ring-stone-200";
+function scoreTileClass(score: number): string {
+  if (score >= 80) return "bg-emerald-500 text-white";
+  if (score >= 60) return "bg-amber-500 text-white";
+  if (score >= 40) return "bg-stone-500 text-white";
+  return "bg-red-400 text-white";
 }
 
-function statusBadgeClass(status: string): string {
+function statusPillClass(status: string): string {
   switch (status) {
     case "pending":
-      return "bg-amber-50 text-amber-800 ring-amber-200";
+      return "bg-amber-100 text-amber-800";
     case "approved":
-      return "bg-emerald-50 text-emerald-800 ring-emerald-200";
+      return "bg-blue-100 text-blue-800";
     case "rejected":
-      return "bg-rose-50 text-rose-800 ring-rose-200";
+      return "bg-red-100 text-red-800";
     case "sent":
-      return "bg-sky-50 text-sky-800 ring-sky-200";
+      return "bg-emerald-100 text-emerald-800";
     default:
-      return "bg-stone-50 text-stone-700 ring-stone-200";
+      return "bg-stone-100 text-stone-700";
   }
 }
 
 function statusLabel(status: string): string {
-  return (status || "pending").charAt(0).toUpperCase() + (status || "pending").slice(1);
+  if (status === "pending") return "Pending";
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  if (status === "sent") return "Sent";
+  return (status || "Pending").charAt(0).toUpperCase() + (status || "Pending").slice(1);
 }
 
 export default function PendingList({ records, selectedId, onSelect }: Props) {
@@ -62,14 +66,15 @@ export default function PendingList({ records, selectedId, onSelect }: Props) {
             )}
           >
             <div className="flex items-start gap-3">
-              <span
+              {/* Squared score tile — matches SLH outreach left-list style */}
+              <div
                 className={cn(
-                  "flex-shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-full text-xs font-bold ring-1 ring-inset tabular-nums",
-                  scoreBadgeClass(r.fit_score)
+                  "flex-shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-md text-base font-bold tabular-nums shadow-sm",
+                  scoreTileClass(r.fit_score)
                 )}
               >
                 {r.fit_score}
-              </span>
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <h4 className="text-sm font-semibold text-stone-900 truncate">
@@ -77,8 +82,8 @@ export default function PendingList({ records, selectedId, onSelect }: Props) {
                   </h4>
                   <span
                     className={cn(
-                      "ml-auto text-[10px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded ring-1 ring-inset",
-                      statusBadgeClass(r.approval_status)
+                      "ml-auto text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
+                      statusPillClass(r.approval_status)
                     )}
                   >
                     {statusLabel(r.approval_status)}
@@ -87,12 +92,13 @@ export default function PendingList({ records, selectedId, onSelect }: Props) {
                 <p className="text-xs text-stone-500 truncate">
                   {r.contact_title}
                 </p>
-                <p className="text-xs text-stone-700 truncate mt-0.5">
+                <p className="text-xs text-stone-700 truncate mt-0.5 inline-flex items-center gap-1">
+                  <span className="text-stone-400">🏨</span>
                   {r.hotel_name}
                 </p>
                 {angle && (
                   <p className="text-[11px] text-purple-700 italic mt-1.5 line-clamp-2 leading-snug">
-                    Focus: {angle}
+                    <span className="font-semibold not-italic text-purple-900">Focus:</span> {angle}
                   </p>
                 )}
               </div>

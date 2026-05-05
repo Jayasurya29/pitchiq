@@ -10,21 +10,32 @@ interface Contact {
   contact_title: string;
   hotel_name: string;
   hotel_location: string;
+  opening_date: string;
   linkedin_url: string;
   email: string;
+}
+
+interface FitBreakdown {
+  base_account_score?: number;
+  research_adjustment?: number;
+  rationale?: string;
 }
 
 interface ResearchResult {
   contact_name: string;
   contact_title: string;
   hotel_name: string;
+  hotel_location?: string;
+  opening_date?: string;
   fit_score: number;
+  fit_breakdown?: FitBreakdown | null;
   pain_points: string[];
   value_props: string[];
   email_subject: string;
   email_body: string;
   linkedin_message: string;
   quality_approved: boolean;
+  quality_scores?: Record<string, number> | null;
   send_time: string;
   follow_up_sequence: string[];
 }
@@ -34,6 +45,7 @@ const empty: Contact = {
   contact_title: "",
   hotel_name: "",
   hotel_location: "",
+  opening_date: "",
   linkedin_url: "",
   email: "",
 };
@@ -71,6 +83,7 @@ export default function Research() {
 
   const valid =
     contact.contact_name.trim() &&
+    contact.contact_title.trim() &&
     contact.hotel_name.trim() &&
     contact.hotel_location.trim();
 
@@ -135,14 +148,17 @@ export default function Research() {
               <Field label="Contact name" required>
                 <input {...field("contact_name")} placeholder="e.g. Maya Rodriguez" className={inputCls} />
               </Field>
-              <Field label="Title">
+              <Field label="Title" required>
                 <input {...field("contact_title")} placeholder="e.g. GM, Director of Operations" className={inputCls} />
               </Field>
               <Field label="Hotel name" required>
                 <input {...field("hotel_name")} placeholder="e.g. The Langham Chicago" className={inputCls} />
               </Field>
               <Field label="Hotel location" required>
-                <input {...field("hotel_location")} placeholder="e.g. Chicago, IL" className={inputCls} />
+                <input {...field("hotel_location")} placeholder="e.g. Chicago, IL, USA" className={inputCls} />
+              </Field>
+              <Field label="Opening date (optional)">
+                <input {...field("opening_date")} placeholder="e.g. October 2026 / Q3 2026 / 2027" className={inputCls} />
               </Field>
               <Field label="LinkedIn URL">
                 <input {...field("linkedin_url")} placeholder="https://linkedin.com/in/..." className={inputCls} />
@@ -200,6 +216,34 @@ export default function Research() {
                 Go to Pending
               </Button>
             </CardHeader>
+            {result.fit_breakdown?.rationale && (
+              <CardBody className="border-t border-stone-100 pt-3">
+                <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">
+                  Score breakdown
+                </div>
+                <p className="text-xs leading-relaxed text-stone-600">
+                  Base {result.fit_breakdown.base_account_score ?? 0}/100
+                  {typeof result.fit_breakdown.research_adjustment === "number" &&
+                    result.fit_breakdown.research_adjustment !== 0 && (
+                      <>
+                        {" "}
+                        <span
+                          className={
+                            result.fit_breakdown.research_adjustment > 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
+                          {result.fit_breakdown.research_adjustment > 0 ? "+" : ""}
+                          {result.fit_breakdown.research_adjustment}
+                        </span>{" "}
+                        from research
+                      </>
+                    )}
+                  . {result.fit_breakdown.rationale}
+                </p>
+              </CardBody>
+            )}
           </Card>
 
           {/* Conversation hooks */}

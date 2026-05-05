@@ -1,7 +1,24 @@
+"""Agent 1 — Researcher (v2 generic).
+
+What changed from v1:
+  - Synthesis prompt is brand-agnostic — uses COMPANY_BACKGROUND from
+    env via _helpers.get_company_background(), not hardcoded JA Uniforms
+  - JSON mode via invoke_json — drops fragile parse_synthesis() text parser
+  - Parallel-search engine (Serper x6 + Apollo + scrape) preserved verbatim
+"""
+
 from state import PitchState
+from config import (
+    get_researcher_llm,
+    SERPER_API_KEY,
+    APOLLO_API_KEY,
+)
+from _helpers import (
+    get_company_background,
+    invoke_json,
+)
 import httpx
 from bs4 import BeautifulSoup
-from config import llm, llm_lite, SERPER_API_KEY, APOLLO_API_KEY
 from langchain_core.messages import HumanMessage
 import json
 import concurrent.futures
@@ -294,7 +311,10 @@ def synthesize_with_gemini(
     awards_results    = "\n".join(search_results.get("awards", []))
     challenges_results= "\n".join(search_results.get("challenges", []))
 
-    prompt = f"""You are a senior B2B sales intelligence analyst for J.A. Uniforms, a premium uniform supplier for hotels.
+    _company_bg = get_company_background()
+    prompt = f"""You are a senior B2B sales intelligence analyst.
+
+You work for: {_company_bg}
 
 Analyze ALL of the following research and extract structured intelligence.
 
@@ -349,8 +369,25 @@ Rules:
 - personalization_hook must be a SPECIFIC fact, not generic
 """
 
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return parse_synthesis(response.content)
+    # Use invoke_json from _helpers so we don't need parse_synthesis at all.
+    # Gemini in JSON mode produces valid JSON every time; parse_json_loose
+    # has tolerant fallback for the rare truncated response.
+    default = {
+        "hotel_summary": "",
+        "hotel_tier": "",
+        "staff_estimate": "",
+        "recent_news": [],
+        "hiring_signals": [],
+        "expansion_signals": [],
+        "awards": [],
+        "pain_points": [],
+        "signals": [],
+        "contact_summary": "",
+        "contact_decision_authority": "",
+        "outreach_angle": "",
+        "personalization_hook": "",
+    }
+    return invoke_json(get_researcher_llm(), prompt, default)
 
 def parse_synthesis(response: str) -> dict:
     """

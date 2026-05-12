@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel
 import sys
 import os
 import asyncio
@@ -12,7 +12,12 @@ from database.models import ResearchHistory
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from database.database import SessionLocal
-from database.crud import save_research, get_all_research, get_pending_research, approve_research, reject_research, get_research_by_id, mark_sent, revert_to_pending, update_outreach
+from database.crud import (
+    save_research, get_all_research, get_pending_research,
+    approve_research, reject_research,
+    approve_email, approve_linkedin,
+    reject_email, reject_linkedin
+)
 from api.email_sender import send_email
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))
@@ -29,39 +34,24 @@ app.add_middleware(
 )
 
 class ResearchRequest(BaseModel):
-    contact_name: str = Field(..., min_length=1, description="Contact full name")
-    contact_title: str = Field(..., min_length=1, description="Contact job title (required for analyst tiering)")
-    hotel_name: str = Field(..., min_length=1, description="Hotel name")
-    hotel_location: str = Field(..., min_length=1, description="City, state/region, country (e.g. 'Miami, FL, USA')")
-    # NEW (PitchIQ port 2026-05-05): opening_date drives Writer tone + Scheduler cadence
-    opening_date: str = ""
+    contact_name: str
+    contact_title: str
+    hotel_name: str
+    hotel_location: str = ""
     linkedin_url: str = ""
     email: str = ""
-    sender_first_name: str = ""
-
-    @field_validator("contact_name", "contact_title", "hotel_name", "hotel_location")
-    @classmethod
-    def strip_required(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("This field cannot be empty or whitespace")
-        return v
 
 class ResearchResponse(BaseModel):
     contact_name: str
     contact_title: str
     hotel_name: str
-    hotel_location: str = ""
-    opening_date: str = ""
     fit_score: int
-    fit_breakdown: dict | None = None
     pain_points: list[str]
     value_props: list[str]
     email_subject: str
     email_body: str
     linkedin_message: str
     quality_approved: bool
-    quality_scores: dict | None = None
     send_time: str
     follow_up_sequence: list[str]
 
@@ -72,9 +62,6 @@ def build_initial_state(request: ResearchRequest) -> dict:
         "contact_title": request.contact_title,
         "hotel_name": request.hotel_name,
         "hotel_location": request.hotel_location,
-        # PitchIQ port 2026-05-05: new fields
-        "opening_date": request.opening_date or None,
-        "sender_first_name": request.sender_first_name or None,
         "linkedin_url": request.linkedin_url or None,
         "email": request.email or None,
         "company_summary": None,
@@ -82,26 +69,16 @@ def build_initial_state(request: ResearchRequest) -> dict:
         "pain_points": None,
         "signals": None,
         "contact_summary": None,
-        "outreach_angle": None,
-        "personalization_hook": None,
-        "hotel_tier": None,
-        "hiring_signals": None,
-        "awards": None,
         "fit_score": None,
-        "fit_breakdown": None,
-        "primary_angle": None,
         "value_props": None,
         "email_subject": None,
         "email_body": None,
         "linkedin_message": None,
         "quality_approved": None,
         "quality_feedback": None,
-        "quality_scores": None,
-        "previous_feedback": None,
-        "linkedin_quality": None,
         "rewrite_count": None,
         "send_time": None,
-        "follow_up_sequence": None,
+        "follow_up_sequence": None
     }
 
 
@@ -116,7 +93,6 @@ def research_company(request: ResearchRequest):
         pipeline = build_graph()
         result = pipeline.invoke(build_initial_state(request))
 
-        # Save to database
         db = SessionLocal()
         save_research(db, result)
         db.close()
@@ -125,19 +101,15 @@ def research_company(request: ResearchRequest):
             contact_name=result["contact_name"],
             contact_title=result["contact_title"],
             hotel_name=result["hotel_name"],
-            hotel_location=result.get("hotel_location") or "",
-            opening_date=result.get("opening_date") or "",
-            fit_score=result.get("fit_score") or 0,
-            fit_breakdown=result.get("fit_breakdown"),
-            pain_points=result.get("pain_points") or [],
-            value_props=result.get("value_props") or [],
-            email_subject=result.get("email_subject") or "",
-            email_body=result.get("email_body") or "",
-            linkedin_message=result.get("linkedin_message") or "",
-            quality_approved=result.get("quality_approved") or False,
-            quality_scores=result.get("quality_scores"),
-            send_time=result.get("send_time") or "",
-            follow_up_sequence=result.get("follow_up_sequence") or [],
+            fit_score=result["fit_score"] or 0,
+            pain_points=result["pain_points"] or [],
+            value_props=result["value_props"] or [],
+            email_subject=result["email_subject"] or "",
+            email_body=result["email_body"] or "",
+            linkedin_message=result["linkedin_message"] or "",
+            quality_approved=result["quality_approved"] or False,
+            send_time=result["send_time"] or "",
+            follow_up_sequence=result["follow_up_sequence"] or []
         )
 
     except Exception as e:
@@ -150,12 +122,9 @@ async def research_stream(
     contact_title: str,
     hotel_name: str,
     hotel_location: str = "",
-    opening_date: str = "",
     linkedin_url: str = "",
-    email: str = "",
-    sender_first_name: str = "",
+    email: str = ""
 ):
-
     async def event_generator():
         def send(event_type, message="", agent="", result=None):
             data = {"type": event_type, "message": message, "agent": agent}
@@ -175,10 +144,8 @@ async def research_stream(
                 contact_title=contact_title,
                 hotel_name=hotel_name,
                 hotel_location=hotel_location,
-                opening_date=opening_date,
                 linkedin_url=linkedin_url,
-                email=email,
-                sender_first_name=sender_first_name,
+                email=email
             )
 
             loop = asyncio.get_event_loop()
@@ -209,19 +176,15 @@ async def research_stream(
                 "contact_name": result["contact_name"],
                 "contact_title": result["contact_title"],
                 "hotel_name": result["hotel_name"],
-                "hotel_location": result.get("hotel_location") or "",
-                "opening_date": result.get("opening_date") or "",
-                "fit_score": result.get("fit_score") or 0,
-                "fit_breakdown": result.get("fit_breakdown"),
-                "pain_points": result.get("pain_points") or [],
-                "value_props": result.get("value_props") or [],
-                "email_subject": result.get("email_subject") or "",
-                "email_body": result.get("email_body") or "",
-                "linkedin_message": result.get("linkedin_message") or "",
-                "quality_approved": result.get("quality_approved") or False,
-                "quality_scores": result.get("quality_scores"),
-                "send_time": result.get("send_time") or "",
-                "follow_up_sequence": result.get("follow_up_sequence") or [],
+                "fit_score": result["fit_score"],
+                "pain_points": result["pain_points"] or [],
+                "value_props": result["value_props"] or [],
+                "email_subject": result["email_subject"] or "",
+                "email_body": result["email_body"] or "",
+                "linkedin_message": result["linkedin_message"] or "",
+                "quality_approved": result["quality_approved"] or False,
+                "send_time": result["send_time"] or "",
+                "follow_up_sequence": result["follow_up_sequence"] or []
             }
             yield send("complete", result=final)
 
@@ -234,69 +197,27 @@ async def research_stream(
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
 
+
 @app.get("/history")
 def get_history():
-    """Lightweight summary endpoint for the History page.
-
-    Returns the same shape as /pending so the History UI can use the same
-    record-card component. If you need the full detail for one row, hit
-    GET /research/{id}.
-    """
     db = SessionLocal()
     records = get_all_research(db)
     db.close()
-    return [_record_to_dict(r) for r in records]
-
-
-def _record_to_dict(r) -> dict:
-    """Serialize a ResearchHistory row to JSON-friendly dict.
-
-    Includes the full PitchIQ port 2026-05-05 field set so the Pending UI
-    can show brief, hooks, breakdown, sources count, etc. Nullable v2
-    fields default to None and the UI handles them gracefully.
-    """
-    return {
-        "id": r.id,
-        # Identity
-        "contact_name": r.contact_name,
-        "contact_title": r.contact_title,
-        "hotel_name": r.hotel_name,
-        "hotel_location": r.hotel_location or "",
-        "linkedin_url": r.linkedin_url or "",
-        "email": r.email or "",
-        "opening_date": getattr(r, "opening_date", None) or "",
-        # Researcher
-        "company_summary": r.company_summary or "",
-        "contact_summary": r.contact_summary or "",
-        "pain_points": r.pain_points or [],
-        "signals": r.signals or [],
-        "outreach_angle": getattr(r, "outreach_angle", None) or "",
-        "personalization_hook": getattr(r, "personalization_hook", None) or "",
-        "hotel_tier": getattr(r, "hotel_tier", None) or "",
-        "hiring_signals": getattr(r, "hiring_signals", None) or [],
-        "awards": getattr(r, "awards", None) or [],
-        # Analyst
-        "fit_score": r.fit_score or 0,
-        "fit_breakdown": getattr(r, "fit_breakdown", None),
-        "primary_angle": getattr(r, "primary_angle", None) or "",
-        "value_props": r.value_props or [],
-        # Writer
-        "email_subject": r.email_subject or "",
-        "email_body": r.email_body or "",
-        "linkedin_message": r.linkedin_message or "",
-        # Critic
-        "quality_approved": bool(r.quality_approved),
-        "quality_scores": getattr(r, "quality_scores", None),
-        "linkedin_quality": getattr(r, "linkedin_quality", None) or "",
-        # Scheduler
-        "send_time": r.send_time or "",
-        "follow_up_sequence": r.follow_up_sequence or [],
-        # Lifecycle
-        "approval_status": r.approval_status or "pending",
-        "rejection_feedback": getattr(r, "rejection_feedback", None) or "",
-        "created_at": str(r.created_at) if r.created_at else "",
-        "updated_at": str(getattr(r, "updated_at", "")) if getattr(r, "updated_at", None) else "",
-    }
+    return [
+        {
+            "id": r.id,
+            "contact_name": r.contact_name,
+            "contact_title": r.contact_title,
+            "hotel_name": r.hotel_name,
+            "fit_score": r.fit_score,
+            "email_subject": r.email_subject,
+            "linkedin_message": r.linkedin_message,
+            "quality_approved": r.quality_approved,
+            "approval_status": r.approval_status,
+            "created_at": str(r.created_at)
+        }
+        for r in records
+    ]
 
 
 @app.get("/pending")
@@ -304,114 +225,94 @@ def get_pending():
     db = SessionLocal()
     records = get_pending_research(db)
     db.close()
-    return [_record_to_dict(r) for r in records]
+    return [
+        {
+            "id": r.id,
+            "contact_name": r.contact_name,
+            "contact_title": r.contact_title,
+            "hotel_name": r.hotel_name,
+            "fit_score": r.fit_score,
+            "email_subject": r.email_subject,
+            "email_body": r.email_body,
+            "linkedin_message": r.linkedin_message,
+            "pain_points": r.pain_points,
+            "value_props": r.value_props,
+            "send_time": r.send_time,
+            "follow_up_sequence": r.follow_up_sequence,
+            "approval_status": r.approval_status,
+            "email_approval_status": r.email_approval_status,
+            "linkedin_approval_status": r.linkedin_approval_status,
+            "created_at": str(r.created_at)
+        }
+        for r in records
+    ]
 
 
-@app.get("/research/{research_id}")
-def get_one_research(research_id: int):
+@app.post("/approve-email/{research_id}")
+def approve_email_endpoint(research_id: int):
+    """Approve email only"""
     db = SessionLocal()
-    record = get_research_by_id(db, research_id)
+    record = approve_email(db, research_id)
     db.close()
     if not record:
         raise HTTPException(status_code=404, detail="Research not found")
-    return _record_to_dict(record)
-
-
-class UpdateOutreachRequest(BaseModel):
-    email_subject: str | None = None
-    email_body: str | None = None
-    linkedin_message: str | None = None
-
-
-@app.patch("/research/{research_id}")
-def patch_research(research_id: int, patch: UpdateOutreachRequest):
-    """Inline-edit subject / body / LinkedIn message before sending.
-
-    Used by the Pending detail view's edit-in-place UI.
-    """
-    db = SessionLocal()
-    record = update_outreach(db, research_id, patch.model_dump(exclude_none=True))
-    db.close()
-    if not record:
-        raise HTTPException(status_code=404, detail="Research not found")
-    return _record_to_dict(record)
-
-
-@app.post("/sent/{research_id}")
-def mark_as_sent(research_id: int):
-    """Mark an outreach as sent (after sales rep clicks Open in Mail)."""
-    db = SessionLocal()
-    record = mark_sent(db, research_id)
-    db.close()
-    if not record:
-        raise HTTPException(status_code=404, detail="Research not found")
-    return {"message": f"Marked as sent", "id": research_id}
-
-
-@app.post("/revert/{research_id}")
-def revert_record(research_id: int):
-    """Move an approved/rejected/sent record back to pending."""
-    db = SessionLocal()
-    record = revert_to_pending(db, research_id)
-    db.close()
-    if not record:
-        raise HTTPException(status_code=404, detail="Research not found")
-    return {"message": f"Reverted to pending", "id": research_id}
-
-
-@app.post("/approve/{research_id}")
-def approve_email(research_id: int):
-    db = SessionLocal()
-    record = approve_research(db, research_id)
-    db.close()
-    if not record:
-        raise HTTPException(status_code=404, detail="Research not found")
-    
-    # Send the email!
-    if record.email and record.email_subject and record.email_body:
-        #from email_sender import send_email
-        result = send_email(
-            to_email=record.email,
-            subject=record.email_subject,
-            body=record.email_body
+    try:
+        send_email(
+            to_email=record.email or "test@example.com",
+            subject=record.email_subject or "",
+            body=record.email_body or ""
         )
-        if result["success"]:
-            return {
-                "message": f"Email approved and sent to {record.email}!",
-                "id": research_id,
-                "email_sent": True
-            }
-    
-    return {
-        "message": f"Email approved for {record.contact_name}!",
-        "id": research_id,
-        "email_sent": False
-    }
+    except Exception as e:
+        print(f"Email send failed: {e}")
+    return {"message": "Email approved!", "id": research_id}
 
 
-@app.post("/reject/{research_id}")
-def reject_email(research_id: int, feedback: str = ""):
+@app.post("/approve-linkedin/{research_id}")
+def approve_linkedin_endpoint(research_id: int):
+    """Approve LinkedIn only"""
     db = SessionLocal()
-    record = reject_research(db, research_id, feedback)
+    record = approve_linkedin(db, research_id)
     db.close()
     if not record:
         raise HTTPException(status_code=404, detail="Research not found")
-    return {"message": f"Email rejected", "id": research_id}
+    return {"message": "LinkedIn approved!", "id": research_id}
+
+
+@app.post("/reject-email/{research_id}")
+def reject_email_endpoint(research_id: int):
+    """Reject email only"""
+    db = SessionLocal()
+    record = reject_email(db, research_id)
+    db.close()
+    if not record:
+        raise HTTPException(status_code=404, detail="Research not found")
+    return {"message": "Email rejected", "id": research_id}
+
+
+@app.post("/reject-linkedin/{research_id}")
+def reject_linkedin_endpoint(research_id: int):
+    """Reject LinkedIn only"""
+    db = SessionLocal()
+    record = reject_linkedin(db, research_id)
+    db.close()
+    if not record:
+        raise HTTPException(status_code=404, detail="Research not found")
+    return {"message": "LinkedIn rejected", "id": research_id}
+
 
 @app.post("/sequence/{research_id}")
 def generate_sequence(research_id: int):
     db = SessionLocal()
     record = db.query(ResearchHistory).filter(ResearchHistory.id == research_id).first()
     db.close()
-    
+
     if not record:
         raise HTTPException(status_code=404, detail="Research not found")
-    
+
     from agents.config import llm
     from langchain_core.messages import HumanMessage
-    import json
     import re
-    
+
     prompt = f"""
 You are a B2B sales expert. Generate a 3-touch email sequence for hotel uniform sales.
 
@@ -449,10 +350,10 @@ Touch 1: Use the original email exactly as provided
 Touch 2: Lead with a specific value prop, reference their pain point
 Touch 3: Short breakup email, 3-4 lines max, create gentle urgency
 """
-    
+
     response = llm.invoke([HumanMessage(content=prompt)])
     text = response.content.strip()
     text = re.sub(r'```json|```', '', text).strip()
     sequence = json.loads(text)
-    
+
     return sequence
